@@ -1,92 +1,198 @@
+"""
+seed_properties.py
+
+Script to import property data from a JSON file into MongoDB, referencing cities and property types.
+Duplicates are skipped, and all actions are logged with logfire.
+"""
+
 import os
 import json
-from typing import Optional
+from typing import Optional, Union
 from pydantic import BaseModel
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
 from dotenv import load_dotenv
 import logfire
+from bson import ObjectId
 
 # Start logfire session
 logfire.configure()
 
-# Pydantic model for City
-class City(BaseModel):
-    uniqueId: Optional[int] = None
-    City: Optional[str] = None 
-    CityCode: Optional[str] = None 
-    CAP: Optional[int] = None 
-    Regione: Optional[str] = None 
-    Nazione: Optional[str] = None 
-    ISTAT: Optional[str] = None 
-    LAT: Optional[float] = None
-    LNG: Optional[float] = None
-    Surface: Optional[float] = None
-    Population: Optional[int] = None
+class PropertiesInfo(BaseModel):
+    """
+    Pydantic model for property information.
+    """
+    name: str
+    booking_id: int
+    type_structure: str
+    stars: int
+    city: str
+    address: str
+    distanceCentre: float
+    url: str
+    latitude: float
+    longitude: float
+    CirCin: str
+    zone: Optional[str] = None
+    roomsNum: Optional[int] = None
+    seasonality: Optional[str] = None
+    totalAccomTypes: Optional[int] = None
+    bedsNum: Optional[int] = None
+    cityId: Union[str, ObjectId, None] = None  # Foreign key to Cities collection
+
+    class Config:
+        arbitrary_types_allowed = True
+
+# City name translation mapping (expand as needed)
+CITY_TRANSLATION = {
+    "Milan": "Milano",
+    "Rome": "Roma",
+    "Florence": "Firenze",
+    "Venice": "Venezia",
+    "Naples": "Napoli",
+    "Turin": "Torino",
+    "Genoa": "Genova",
+    "Bologna": "Bologna",
+    "Palermo": "Palermo",
+    "Bari": "Bari",
+    # Add more as needed
+}
+
+def translate_city(city_name: str) -> str:
+    """
+    Translate city names from English (or other languages) to Italian using a dictionary.
+    If not found, returns the original name.
+    """
+    return CITY_TRANSLATION.get(city_name, city_name)
+
+def parse_float(val) -> Optional[float]:
+    """
+    Parse a value to float, handling commas and extracting the first number from a string.
+    """
+    if isinstance(val, (float, int)):
+        return float(val)
+    if isinstance(val, str):
+        val = val.replace(",", ".")
+        import re
+        match = re.search(r"[-+]?\d*\.\d+|\d+", val)
+        return float(match.group()) if match else None
+    return None
+
+def parse_int(val) -> Optional[int]:
+    """
+    Parse a value to int, returning None if conversion fails.
+    """
+    try:
+        return int(val)
+    except (ValueError, TypeError):
+        return None
 
 def main():
+    """
+    Main function to import properties from JSON to MongoDB.
+    - Loads environment variables.
+    - Connects to MongoDB.
+    - Reads property data from JSON.
+    - Translates city names and references city ObjectId.
+    - Checks for duplicates based on booking_id.
+    - Determines property type and inserts into the correct collection.
+    - Logs all actions and prints a summary.
+    """
     load_dotenv()
     db_username = os.getenv("DB_USERNAME")
     db_password = os.getenv("DB_PASSWORD")
     db_name = os.getenv("DB_NAME")
 
-    
     uri = f"mongodb+srv://{db_username}:{db_password}@di-testcluster.kf21i.mongodb.net/?retryWrites=true&w=majority&appName=DI-TestCluster"
     client = MongoClient(uri, server_api=ServerApi('1'))
     db = client[db_name]
 
-    # Insert the data from the JSON file
-    # Update the file path to your local JSON file
-    file_path =   r"C:"
+    # Path to the JSON file with property data
+    file_path = r"C:\Users\Eiji\Desktop\Milano_le.json"
     with open(file_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    success, errors = 0, 0
+    success, errors, duplicates = 0, 0, 0
 
     for record in data:
-        # Skip records that don't have at least a city name and province code
-        if not record.get("denominazione_ita") or not record.get("sigla_provincia"):
+        # Skip records that don't have at least a city name and property name
+        if not record.get("Città") or not record.get("Nome"):
             print(f"Skipping incomplete record: {record}")
             errors += 1
             continue
         try:
-            city = City(
-                City=record.get("denominazione_ita"),
-                CityCode=record.get("sigla_provincia"),
-                CAP=record.get("cap"),
-                Regione=record.get("regione"),
-                Nazione="Italia",
-                ISTAT=record.get("codice_istat"),
-                LAT=record.get("lat"),
-                LNG=record.get("lon"),
-                Surface=int(float(record["superficie_kmq"])) if "superficie_kmq" in record and record["superficie_kmq"] else None,
-                Population=record.get("popolazione")
-            )
-            doc = city.model_dump(exclude_none=True)
+            # Translate and reference the city
+            city_name_raw = record.get("Città")
+            city_name = translate_city(city_name_raw)
+            city_doc = db["Cities"].find_one({"City": city_name})
+            city_id = city_doc.get("_id") if city_doc else None
 
-            # Check if the property is a HTL or an APT
-            # Determine collection based on "tipologia" field
-            tipologia = record.get("tipologia")
-            hotel_types = {204, 212, 205, 219, 218}
-            if tipologia in hotel_types:
+            if not city_id:
+                print(
+                    f"Warning: City '{city_name_raw}' (translated: '{city_name}') not found in Cities collection. Skipping record.")
+                logfire.warning("City not found for property", city_name=city_name_raw,
+                                translated_city=city_name, record=record)
+                errors += 1
+                continue
+
+            # Check for duplicate booking_id in both collections
+            booking_id = parse_int(record.get("id"))
+            if db["Properties_HTL"].find_one({"booking_id": booking_id}) or db["Properties_APT"].find_one({"booking_id": booking_id}):
+                print(f"Duplicate booking_id found: {booking_id}, skipping record.")
+                logfire.info("Duplicate booking_id skipped", booking_id=booking_id, record=record)
+                duplicates += 1
+                continue
+
+            # Build the property document using the Pydantic model
+            prop = PropertiesInfo(
+                name=record.get("Nome"),
+                booking_id=booking_id,
+                type_structure=record.get("Tipologia"),
+                stars=parse_int(record.get("Stelle")),
+                address=record.get("Indirizzo"),
+                distanceCentre=parse_float(record.get("DistanzaCentro")),
+                city=city_name,
+                url=record.get("url"),
+                latitude=parse_float(record.get("LAT")),
+                longitude=parse_float(record.get("LNG")),
+                CirCin=record.get("Cir"),
+                zone=record.get("Zona") if "Zona" in record else None,
+                roomsNum=parse_int(record.get("numCamere")) if "numCamere" in record else None,
+                seasonality=record.get("stagionalita") if "stagionalita" in record else None,
+                totalAccomTypes=parse_int(record.get("totTipiAlloggi")) if "totTipiAlloggi" in record else None,
+                bedsNum=parse_int(record.get("numLetti")) if "numLetti" in record else None,
+                cityId=city_id,
+            )
+            doc = prop.model_dump(exclude_none=True)
+
+            # Determine the property type (HTL or APT) by looking up the Property_Types collection
+            tipologia = record.get("Tipologia")
+            property_type_doc = None
+            if isinstance(tipologia, int):
+                property_type_doc = db["Property_Types"].find_one({"propertyIDs": tipologia})
+            elif isinstance(tipologia, str):
+                property_type_doc = db["Property_Types"].find_one({"property_name": tipologia})
+            else:
+                property_type_doc = None
+
+            # Insert into the correct collection based on property type
+            if property_type_doc and property_type_doc.get("category") == "HTL":
                 collection_name = "Properties_HTL"
             else:
                 collection_name = "Properties_APT"
             collection = db[collection_name]
 
-
-
             result = collection.insert_one(doc)
-            logfire.info("Inserted record", city=doc, mongo_id=str(result.inserted_id))
+            logfire.info("Inserted record", property=doc, mongo_id=str(result.inserted_id))
             success += 1
         except Exception as e:
             print(f"Error inserting record: {e}\nRecord: {record}")
             logfire.error("Error inserting record", error=str(e), record=record)
             errors += 1
 
-    logfire.info("Import summary", success=success, errors=errors)
-    print(f"Import finished. Success: {success}, Errors: {errors}")
-
+    # Log and print the import summary
+    logfire.info("Import summary", success=success, errors=errors, duplicates=duplicates)
+    print(f"Import finished. Success: {success}, Errors: {errors}, Duplicates: {duplicates}")
 
 if __name__ == "__main__":
     main()

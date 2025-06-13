@@ -28,7 +28,7 @@ class PropertiesInfo(BaseModel):
     stars: int
     city: str
     address: str
-    distanceCentre: float
+    distanceCentre: Optional[float] = None
     url: str
     latitude: float
     longitude: float
@@ -108,7 +108,7 @@ def main():
     db = client[db_name]
 
     # Path to the JSON file with property data
-    file_path = r"C:\Users\Eiji\Desktop\Milano_le.json"
+    file_path = r"C:\Users\giova\Desktop\Lombardia_PtyInfo_HTL_ALLS_2024-05-16.json"
     with open(file_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
@@ -118,6 +118,8 @@ def main():
         # Skip records that don't have at least a city name and property name
         if not record.get("Città") or not record.get("Nome"):
             print(f"Skipping incomplete record: {record}")
+            with open("skipped_records.txt", "a", encoding="utf-8") as skipped_file:
+                skipped_file.write(json.dumps(record, ensure_ascii=False) + "\n")
             errors += 1
             continue
         try:
@@ -128,10 +130,14 @@ def main():
             city_id = city_doc.get("_id") if city_doc else None
 
             if not city_id:
-                print(
-                    f"Warning: City '{city_name_raw}' (translated: '{city_name}') not found in Cities collection. Skipping record.")
+                warning_msg = (
+                    f"Warning: City '{city_name_raw}' (translated: '{city_name}') not found in Cities collection. Skipping record."
+                )
+                print(warning_msg)
                 logfire.warning("City not found for property", city_name=city_name_raw,
                                 translated_city=city_name, record=record)
+                with open("skipped_records.txt", "a", encoding="utf-8") as skipped_file:
+                    skipped_file.write(json.dumps(record, ensure_ascii=False) + "\n")
                 errors += 1
                 continue
 
@@ -143,6 +149,18 @@ def main():
                 duplicates += 1
                 continue
 
+            # --- Robust distanceCentre parsing ---
+            raw_distance = record.get("DistanzaCentro")
+            distance_centre = None
+            if raw_distance:
+                try:
+                    # Try to extract a float from the string, e.g. "150 m dal centro" -> 150.0
+                    import re
+                    match = re.search(r"[-+]?\d*\.\d+|\d+", str(raw_distance).replace(",", "."))
+                    distance_centre = float(match.group()) if match else None
+                except Exception:
+                    distance_centre = None
+
             # Build the property document using the Pydantic model
             prop = PropertiesInfo(
                 name=record.get("Nome"),
@@ -150,7 +168,7 @@ def main():
                 type_structure=record.get("Tipologia"),
                 stars=parse_int(record.get("Stelle")),
                 address=record.get("Indirizzo"),
-                distanceCentre=parse_float(record.get("DistanzaCentro")),
+                distanceCentre=distance_centre,
                 city=city_name,
                 url=record.get("url"),
                 latitude=parse_float(record.get("LAT")),

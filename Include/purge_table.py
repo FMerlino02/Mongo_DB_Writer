@@ -16,13 +16,13 @@ def main():
     uri = f"mongodb+srv://{db_username}:{db_password}@di-testcluster.kf21i.mongodb.net/?retryWrites=true&w=majority&appName=DI-TestCluster"
     client = MongoClient(uri, server_api=ServerApi('1'))
     db = client[db_name]
-    collection = db["Properties_HTL"]
+    collection = db["BAR_HTL"]
 
-    confirm = input("Are you sure you want to delete ALL documents from Properties_HTL? Type YES to confirm: ")
+    confirm = input("Are you sure you want to delete ALL documents from BAR_HTL? Type YES to confirm: ")
     if confirm == "YES":
         result = collection.delete_many({})
-        logfire.info("Purged Properties_HTL collection", deleted_count=result.deleted_count)
-        print(f"Deleted {result.deleted_count} documents from Properties_HTL.")
+        logfire.info("Purged BAR_HTL collection", deleted_count=result.deleted_count)
+        print(f"Deleted {result.deleted_count} documents from BAR_HTL.")
     else:
         print("Operation cancelled.")
         logfire.info("Purge cancelled by user")

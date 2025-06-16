@@ -14,33 +14,14 @@ from pydantic import BaseModel
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
 from dotenv import load_dotenv
+from datetime import datetime
 import logfire
 from bson import ObjectId
-from pymongo.errors import PyMongoError
+from map_booking_ids import get_booking_id_map
+from parsers import parse_int, parse_float, parse_date
 
 # Start logfire session
-logfire.configure()
-
-CITY_TRANSLATION = {
-    "Milan": "Milano",
-    "Rome": "Roma",
-    "Florence": "Firenze",
-    "Venice": "Venezia",
-    "Naples": "Napoli",
-    "Turin": "Torino",
-    "Genoa": "Genova",
-    "Bologna": "Bologna",
-    "Palermo": "Palermo",
-    "Bari": "Bari",
-    # Add more as needed
-}
-
-def translate_city(city_name: str) -> str:
-    """
-    Translate city names from English (or other languages) to Italian using a dictionary.
-    If not found, returns the original name.
-    """
-    return CITY_TRANSLATION.get(city_name, city_name)
+logfire.configure()  # Ensure this is correct; if arguments are needed, add them here.
 
 class BarInfo(BaseModel):
     """
@@ -56,7 +37,7 @@ class BarInfo(BaseModel):
     SearchPage: int
     CancellationPolicy: str
     Treatment: str
-    AccomodationType: str
+    AccommodationType: str
     AccomodationLevel: str
     Occupation: int
     PriceTot: float
@@ -69,58 +50,18 @@ class BarInfo(BaseModel):
     ESG_Rating: str
     ESG_Score: str
     RoomsBARLeft: Optional[int] = None
-    DateSearch: date
-    FullDateSearch: date
+    
+    DateSearch: datetime
+    FullDateSearch: datetime
+    
     PropertyId: Union[str, ObjectId]
 
     class Config:
         arbitrary_types_allowed = True
 
-def parse_float(val):
-    """
-    Parse a value to float, handling commas and extracting the first number from a string.
-    Returns None if parsing fails.
-    """
-    if isinstance(val, (float, int)):
-        return float(val)
-    if isinstance(val, str):
-        val = val.replace(",", ".")
-        import re
-        match = re.search(r"[-+]?\d*\.\d+|\d+", val)
-        return float(match.group()) if match else None
-    return None
-
-def parse_int(val):
-    """
-    Parse a value to int, returning None if conversion fails.
-    """
-    if val == "" or val is None:
-        return None
-    try:
-        return int(val)
-    except (ValueError, TypeError):
-        return None
-
-    """
-    Parse a value to datetime, expects format YYYY-MM-DD.
-    Returns None if parsing fails.
-    Prints the input and result for debugging.
-    """
-    if isinstance(val, datetime):
-        return val
-    if isinstance(val, date):
-        dt = datetime.combine(val, datetime.min.time())
-        return dt
-    if isinstance(val, str):
-        try:
-            dt =  val )
-            return dt
-        except ValueError:
-            return None
-    return None
 def extract_accomodation_level(accomodation_type: str) -> str:
     """
-    Extracts the AccomodationLevel from the AccomodationType string using a hashmap for O(1) lookup.
+    Extracts the AccomodationLevel from the AccommodationType string using a hashmap for O(1) lookup.
     Handles both English and Italian types, including edge cases for "Junior Suite" and "studio room".
     If no match is found, returns "Other".
     """
@@ -162,17 +103,6 @@ def extract_accomodation_level(accomodation_type: str) -> str:
             return level_map[word]
     return "Other"
 
-def convert_dates_to_datetimes(doc):
-    """
-    Recursively convert all datetime.date values in a dict to datetime.datetime.
-    """
-    for k, v in doc.items():
-        if isinstance(v, date) and not isinstance(v, datetime):
-            doc[k] = datetime.combine(v, datetime.min.time())
-        elif isinstance(v, dict):
-            convert_dates_to_datetimes(v)
-    return doc
-
 def main():
     """
     Main function to import BAR data from JSON to MongoDB.
@@ -195,11 +125,38 @@ def main():
     db = client[db_name]
 
 
-    file_path = r"C:\Users\giova\Desktop\RL_BAR_HTL_LE.json"
+    file_path = r"C:\Users\Eiji\Desktop\RL_BAR_HTL_LE.json"
     with open(file_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
     success, errors = 0, 0
+
+    property_types = [
+        {"propertyIDs": 201, "property_name": "Appartamenti", "category": "APT"},
+        {"propertyIDs": 204, "property_name": "Hotel", "category": "HTL"},
+        {"propertyIDs": 208, "property_name": "Bed & Breakfast", "category": "APT"},
+        {"propertyIDs": 220, "property_name": "Case vacanze", "category": "APT"},
+        {"propertyIDs": 216, "property_name": "Affittacamere", "category": "APT"},
+        {"propertyIDs": 213, "property_name": "Ville", "category": "APT"},
+        {"propertyIDs": 223, "property_name": "Case di campagna", "category": "APT"},
+        {"propertyIDs": 203, "property_name": "Ostelli", "category": "APT"},
+        {"propertyIDs": 210, "property_name": "Agriturismi", "category": "APT"},
+        {"propertyIDs": 228, "property_name": "Chalet", "category": "APT"},
+        {"propertyIDs": 222, "property_name": "Alloggi in famiglia/Homestays", "category": "APT"},
+        {"propertyIDs": 224, "property_name": "Campeggi di lusso", "category": "APT"},
+        {"propertyIDs": 212, "property_name": "Villaggi turistici", "category": "HTL"},
+        {"propertyIDs": 205, "property_name": "Motel", "category": "HTL"},
+        {"propertyIDs": 206, "property_name": "Resort", "category": "HTL"},
+        {"propertyIDs": 219, "property_name": "Residence", "category": "APT"},
+        {"propertyIDs": 218, "property_name": "Locande", "category": "HTL"},
+    ]
+
+    # Create a lookup dictionary for property types
+    property_types_map = {item["property_name"]: item["category"] for item in property_types}
+
+    # Get the booking_id to _id mapping
+    booking_id_map = get_booking_id_map()
+
 
     for record in data:
         # Skip records that don't have at least a city name and property name
@@ -209,70 +166,82 @@ def main():
                 skipped_file.write(f"{record.get('Destinazione','')},{record.get('Città','')}\n")
             errors += 1
             continue
+
+        booking_id = record.get("id")  # Assuming "id" is the booking_id in the JSON
+        if booking_id in booking_id_map:
+            record_PropertyId = booking_id_map[booking_id]
+        else:
+            # Log the issue and write the skipped record to the file
+            logfire.error(f"Incorrect mapping for booking_id: {booking_id}")
+            with open("skipped_ids.txt", "a", encoding="utf-8") as skipped_file:
+                skipped_file.write(f"{booking_id}\n")
+
         try:
             # No cityId or propertyId mapping, just use the raw values
             bar = BarInfo(
                 Type=record.get("Tipologia"),
-                Stars=parse_int(record.get("Stelle")),
+                Stars= parse_int(record.get("Stelle")),
 
-                CheckIn= record.get("CheckIn")),
-                CheckOut= record.get("CheckOut")),
+                CheckIn= parse_date(record.get("CheckIn")),
+                CheckOut= parse_date(record.get("CheckOut")),
 
                 Destination=record.get("Destinazione"),
                 DemandPressure= record.get("TIN"),
 
-                SearchRank=parse_int(record.get("SearchRank")),
-                SearchPage=parse_int(record.get("SearchPage")),
-                AccomodationType=record.get("AccomodationType"),
+                SearchRank= parse_int(record.get("SearchRank")),
+                SearchPage= parse_int(record.get("SearchPage")),
+
+                AccommodationType=record.get("AccomodationType"),
                 Treatment=record.get("Trattamento"),
                 CancellationPolicy=record.get("CancellationPolicy"),
-                AccomodationLevel=extract_accomodation_level(record.get("AccomodationType", "")),
-                Occupation=parse_int(record.get("Occupazione")),
-                PriceTot=parse_float(record.get("TariffaTOT")),
-                PriceNight=parse_float(record.get("TariffaGG")),
-                RoomBARLeft=parse_int(record.get("RoomsBARLeft")) or None,
+                AccomodationLevel=extract_accomodation_level(record.get("AccommodationType")),
+                Occupation= parse_int(record.get("Occupazione")),
+                PriceTot= parse_float(record.get("TariffaTOT")),
+                PriceNight= parse_float(record.get("TariffaGG")),
+                RoomBARLeft= parse_int(record.get("RoomsBARLeft")) or None,
+
                 IsOffer=bool(record.get("IsAnOffer")),
                 OfferDiscountValue=parse_float(record.get("OfferDiscountValue")),
                 OfferDiscountPercent=parse_float(record.get("OfferDiscountPercent")),
                 OfferTitle=record.get("OfferTitle"),
                 OfferDesc=record.get("OfferDescription"),
+                
                 ESG_Rating=record.get("ESG_Rating"),
                 ESG_Score=str(record.get("ESG_Score")),
 
-                DateSearch= record.get("DataRicerca"),
-                FullDateSearch=  record.get("FullDateSearch")
+                DateSearch=parse_date(record.get("DataRicerca")),
+                FullDateSearch=parse_date(record.get("FullDateSearch"))
                     if record.get("FullDateSearch") else
-                    record.get("DataRicerca"),
+                    parse_date(record.get("DataRicerca")),
                 
-                #PropertyId=record.get("id"),
+                PropertyId= ObjectId(record_PropertyId)
 
-                RoomsBARLeft=parse_int(record.get("RoomsBARLeft")),
             )
             doc = bar.model_dump(exclude_none=True)
-            doc = convert_dates_to_datetimes(doc)
 
-            # Determine the property type (HTL or APT) by looking up the Property_Types collection
+            # Convert all `datetime.date` fields to `datetime.datetime`
+            if isinstance(doc.get("DateSearch"), date):
+                doc["DateSearch"] = datetime.combine(doc["DateSearch"], datetime.min.time())
+            if isinstance(doc.get("FullDateSearch"), date):
+                doc["FullDateSearch"] = datetime.combine(doc["FullDateSearch"], datetime.min.time())
+
+            # Determine the property type (HTL or APT) using the in-memory dictionary
             tipologia = record.get("Tipologia")
-            if isinstance(tipologia, str):
-                property_type_doc = db["Property_Types"].find_one({"property_name": tipologia})
-            else:
-                property_type_doc = None
+            property_category = property_types_map.get(tipologia, "APT")  # Default to "APT" if not found
 
             # Insert into the correct collection based on property type
-            if property_type_doc and property_type_doc.get("category") == "HTL":
-                collection_name = "BAR_HTL"
-            else:
-                collection_name = "BAR_APT"
-
+            collection_name = "BAR_HTL" if property_category == "HTL" else "BAR_APT"
             collection = db[collection_name]
 
             result = collection.insert_one(doc)
+            logfire.info("Inserted record", city=doc, mongo_id=str(result.inserted_id))
+            success += 1  # Increment success count
 
         except Exception as e:
             logfire.error("Error inserting record", error=str(e), record=record)
             with open("skipped_records.txt", "a", encoding="utf-8") as skipped_file:
-                skipped_file.write(f"{record.get('Destinazione','')},{record.get('Città','')}\n")
-            errors += 1
+                skipped_file.write(f"{record.get('Destinazione')},{record.get('Città')}\n")
+                errors += 1
 
     logfire.info("Import summary", success=success, errors=errors)
     print(f"Import finished. Success: {success}, Errors: {errors}")

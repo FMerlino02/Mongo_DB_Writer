@@ -1,0 +1,86 @@
+Mantova,Mantova
+Valtellina,Sondrio
+Valtellina,Mantello
+Valtellina,Caiolo
+Valtellina,Piateda
+Valtellina,Sondrio
+Valtellina,Valdidentro
+Valtellina,Civo
+Valtellina,Dazio
+Valtellina,Sondrio
+Valtellina,Talamona
+Valtellina,Provincia Di Sondrio
+Valtellina,Tirano
+Valtellina,Piuro
+Valtellina,Montagna In Valtellina
+Valtellina,Castione
+Valtellina,Albosaggia
+Valtellina,Albosaggia
+Valtellina,San Giacomo
+Valtellina,Bormio
+Valtellina,Piateda
+Valtellina,Ponte In Valtellina
+Valtellina,Albosaggia
+Valtellina,Castello Dell'acqua
+Valtellina,Castione Andevenno
+Valtellina,Bormio
+Valtellina,Buglio In Monte
+Valtellina,Vervio
+Valtellina,Poggiridenti
+Valtellina,Villa Di Tirano
+Valtellina,Tresivio
+Valtellina,Forcola
+Valtellina,Caspoggio
+Valtellina,Ardenno
+Valtellina,Chiesa In Valmalenco
+Valtellina,Somasassa
+Valtellina,Sondrio
+Valtellina,Tovo Di Sant'agata
+Valtellina,Poggiridenti Piano
+Valtellina,Buglio In Monte
+Valtellina,Valfurva
+Valtellina,Piateda
+Valtellina,Mazzo Di Valtellina
+Valtellina,Caiolo
+Valtellina,Livigno
+Valtellina,Tirano
+Valtellina,Campodolcino
+Valtellina,Livigno
+Valtellina,Castione Andevenno
+Valtellina,Livigno
+Valtellina,Bormio
+Valtellina,Provincia Di Sondrio
+Valtellina,Villa Di Tirano
+Valtellina,San Giacomo Filippo
+Valtellina,Cosio Valtellino
+Valtellina,Cosio Valtellino
+Valtellina,Bormio
+Valtellina,Cosio Valtellino
+Valtellina,Tirano
+Valtellina,Forcola
+Valtellina,Livigno
+Valtellina,Chiavenna
+Valtellina,San Cassiano
+Valtellina,Bormio
+Valtellina,Chiavenna
+Valtellina,San Cassiano
+Valtellina,Tirano
+Valtellina,Sassella
+Valtellina,Campodolcino
+Valtellina,Sondrio
+Valtellina,Madesimo
+Valtellina,Piuro
+Valtellina,San Cassiano
+Valtellina,Sondrio
+Valtellina,Chiavenna
+Valtellina,Cosio Valtellino
+Valtellina,Tovo Di Sant'agata
+Valtellina,Tirano
+Valtellina,Campodolcino
+Valtellina,Pianazzola
+Valtellina,Mantello
+Valtellina,Uzza
+Valtellina,Borgonuovo
+Valtellina,Sondrio
+Valtellina,Madesimo
+Valtellina,Provincia Di Sondrio

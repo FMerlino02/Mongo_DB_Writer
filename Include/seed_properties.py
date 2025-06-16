@@ -28,7 +28,7 @@ class PropertiesInfo(BaseModel):
     stars: int
     city: str
     address: str
-    distanceCentre: Optional[float] = None
+    distanceCentre: float
     url: str
     latitude: float
     longitude: float
@@ -38,7 +38,7 @@ class PropertiesInfo(BaseModel):
     seasonality: Optional[str] = None
     totalAccomTypes: Optional[int] = None
     bedsNum: Optional[int] = None
-    cityId: Union[str, ObjectId, None] = None  # Foreign key to Cities collection
+    cityId: Union[str, ObjectId]  # Foreign key to Cities collection
 
     class Config:
         arbitrary_types_allowed = True
@@ -108,7 +108,7 @@ def main():
     db = client[db_name]
 
     # Path to the JSON file with property data
-    file_path = r"C:\Users\giova\Desktop\Lombardia_PtyInfo_HTL_ALLS_2024-05-16.json"
+    file_path = r"C:\Users\Eiji\Desktop\Milano_le.json"
     with open(file_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 

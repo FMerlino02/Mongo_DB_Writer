@@ -18,7 +18,7 @@ def main():
     db = client[db_name]
 
     # Specify the collection to purge
-    COLLECTION_NAME = "BAR_APT"
+    COLLECTION_NAME = "FULL_APT"
 
 
     collection = db[COLLECTION_NAME]

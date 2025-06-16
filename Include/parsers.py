@@ -15,11 +15,14 @@ def parse_int(val):
     
 def parse_float(val):
     """
-    Safely parse a float from val. Returns None if val is empty or invalid.
+    Safely parse a float from val. Handles ',' as a decimal separator.
+    Returns None if val is empty or invalid.
     """
     try:
         if val == '' or val is None:
             return None
+        if isinstance(val, str):
+            val = val.replace(',', '.')  # Replace ',' with '.' for decimal points
         return float(val)
     except (ValueError, TypeError):
         return None

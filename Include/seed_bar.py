@@ -61,7 +61,7 @@ class BarInfo(BaseModel):
 
 def extract_accomodation_level(accomodation_type: str) -> str:
     """
-    Extracts the AccomodationLevel from the AccommodationType string using a hashmap for O(1) lookup.
+    Extracts the AccomodationLevel from the AccommodationType string using a hashmap lookup.
     Handles both English and Italian types, including edge cases for "Junior Suite" and "studio room".
     If no match is found, returns "Other".
     """

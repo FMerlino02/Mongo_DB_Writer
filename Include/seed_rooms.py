@@ -12,15 +12,41 @@ from pymongo.server_api import ServerApi
 from dotenv import load_dotenv
 from bson import ObjectId
 from parsers import parse_int, parse_float, parse_date
+import logfire
+import os
+import json
+import re
 
 # Start logfire session
 logfire.configure()
+
+
+def parse_occupancy(accomodation_type: str, occupazione: int):
+    """
+    Extracts OccupancyAdult and OccupancyKid from AccomodationType string.
+    If 'Bambino' is not present, uses 'Occupazione' for adults and sets kids to 0.
+    """
+    if not accomodation_type or not isinstance(accomodation_type, str):
+        return None, None
+
+    # Regex to find "Adulti" and "Bambino" numbers
+    adult_match = re.search(r"(\d+)\s*Adulti", accomodation_type)
+    kid_match = re.search(r"(\d+)\s*Bambino", accomodation_type)
+
+    occupancy_adult = int(adult_match.group(1)) if adult_match else None
+    occupancy_kid = int(kid_match.group(1)) if kid_match else 0
+
+    # If no "Adulti" or "Bambino" found, fallback to Occupazione
+    if occupancy_adult is None:
+        occupancy_adult = occupazione
+        occupancy_kid = 0
+
+    return occupancy_adult, occupancy_kid
 
 class RoomInfo(BaseModel):
     """
     Pydantic model for room information.
     """
-    uniqueRoomId: str
     roomName: str
     roomDesc: List[str]
     roomSize: Optional[int]
@@ -74,6 +100,12 @@ def seed_rooms():
                 errors += 1
                 continue
 
+            # Use parse_occupancy to extract adult/kid occupancy
+            occupancy_adult, occupancy_kid = parse_occupancy(
+                record.get("AccomodationType"),
+                parse_int(record.get("Occupazione"))
+            )
+
             # Create a RoomInfo object
             room = RoomInfo(
                 uniqueRoomId=record.get("uniqueRoomId"),
@@ -81,8 +113,8 @@ def seed_rooms():
                 roomDesc=record.get("roomDesc", []),
                 roomSize=parse_int(record.get("roomSize")),
                 hasInventory=record.get("hasInventory", False),
-                OccupancyAdult=parse_int(record.get("OccupancyAdult")),
-                OccupancyKid=parse_int(record.get("OccupancyKid")),
+                OccupancyAdult=occupancy_adult,
+                OccupancyKid=occupancy_kid,
                 BedDesc=record.get("BedDesc"),
                 MainType=record.get("MainType"),
                 SubType=record.get("SubType"),

@@ -233,6 +233,6 @@ This repository currently ships **without an explicit license**.  All rights res
 
 ## Authors & Acknowledgements
 
-Created and maintained by **[FMerlino02](https://github.com/FMerlino02)**.  Inspired by data‑engineering patterns from Airbnb and Booking.com research papers.
+Created and maintained by **[FMerlino02](https://github.com/FMerlino02)**.  Inspired by data‑engineering patterns from Booking.com.
 
 Special thanks to contributors who reported bugs and shared datasets for testing.

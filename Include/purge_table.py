@@ -18,7 +18,7 @@ def main():
     db = client[db_name]
 
     # Specify the collection to purge
-    COLLECTION_NAME = "Rooms"
+    COLLECTION_NAME = "Reviews"
 
 
     collection = db[COLLECTION_NAME]

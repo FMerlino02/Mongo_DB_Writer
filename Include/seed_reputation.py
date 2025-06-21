@@ -20,16 +20,16 @@ from parsers import parse_float, parse_int, parse_date
 logfire.configure()
 
 class ReputationKPI(BaseModel):
-    WifiScore: str
-    QPScore: Optional[float]
-    PositionScore: Optional[float]
-    CleanScore: Optional[float]
-    ComfortScore: Optional[float]
-    ServiceScore: Optional[float]
-    StaffScore: Optional[float]
-    Reviews: Optional[int]
-    Score: Optional[int]
-    Valuation: Optional[str]
+    WifiScore: float
+    QPScore: float
+    PositionScore: float
+    CleanScore: float
+    ComfortScore: float
+    ServiceScore: float
+    StaffScore: float
+    Reviews: int
+    Score: int
+    Valuation: str
     FullDateSearch: datetime
     DateSearch: datetime
     PropertyId: Union[str, ObjectId]
@@ -56,7 +56,7 @@ def main():
     client = MongoClient(uri, server_api=ServerApi('1'))
     db = client[db_name]
 
-    file_path = r"C:\Users\Eiji\Desktop\reputation_kpi.json"  # Adjust path as needed
+    file_path = r"C:\Users\Eiji\Desktop\RL_FULL_HTL_LE.json"  # Adjust path as needed
     with open(file_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
@@ -65,13 +65,18 @@ def main():
     for record in data:
         try:
             # Resolve PropertyId (FK) by booking_id in Properties_HTL/APT
-            booking_id = record.get("PropertyId")
+            booking_id = record.get("id")
             property_doc = db["Properties_HTL"].find_one({"booking_id": booking_id}) or \
                            db["Properties_APT"].find_one({"booking_id": booking_id})
-            property_fk = property_doc["_id"] if property_doc else None
+
+            if property_doc:
+                property_fk = property_doc["_id"]
+            else:
+                logfire.error(f"Property not found for booking_id: {booking_id}")
+                continue
 
             rep = ReputationKPI(
-                WifiScore=str(record.get("WiFi")),
+                WifiScore=parse_float(record.get("WiFi")),
                 QPScore=parse_float(record.get("QualitàPrezzo")),
                 PositionScore=parse_float(record.get("Posizione")),
                 CleanScore=parse_float(record.get("Pulizia")),

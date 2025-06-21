@@ -138,66 +138,64 @@ def main():
             errors += 1
             continue
 
-        # Iterate over the list of rooms in the record
-        for room in record.get("Rooms", []):
-            try:
-                # Create a document for each room
-                full = FullInfo(
-                    Type=record.get("Tipologia"),
-                    Stars=parse_int(record.get("Stelle")),
-                    CheckIn=parse_date(record.get("CheckIn")),
-                    CheckOut=parse_date(record.get("CheckOut")),
-                    Destination=record.get("Destinazione"),
-                    DemandPressure=record.get("TIN"),
-                    SearchRank=parse_int(record.get("SearchRank")),
-                    SearchPage=parse_int(record.get("SearchPage")),
-                    AccommodationType=room.get("AccomodationType"),
-                    Treatment=room.get("Trattamento"),
-                    CancellationPolicy=room.get("CancellationType"),
-                    AccomodationLevel=extract_accommodation_level(room.get("AccomodationType")),
-                    Occupation=parse_int(room.get("Occupazione")),
-                    PriceTot=parse_float(room.get("TariffaTOT")),
-                    PriceNight=parse_float(room.get("TariffaGG")),
-                    minimunStay=parse_int(room.get("minimunStay")),
-                    RoomsBARLeft=parse_int(room.get("RoomsLeft")) or None,
-                    IsOffer=room.get("IsAnOffer") == "YES",
-                    OfferDiscountValue=parse_float(room.get("OfferDiscount")),
-                    OfferDiscountPercent=None,  # Adjust if needed
-                    OfferTitle=room.get("OfferTitle"),
-                    OfferDesc=room.get("OfferDescription"),
-                    ESG_Rating=record.get("ESG_Rating"),
-                    ESG_Score=str(record.get("ESG_Score")),
-                    DateSearch=parse_date(record.get("DataRicerca")),
-                    FullDateSearch=parse_date(record.get("FullDataRicerca"))
-                        if record.get("FullDataRicerca")
-                        else parse_date(record.get("DataRicerca")),
-                    PropertyId=ObjectId(record_PropertyId)
-                )
-                doc = full.model_dump(exclude_none=True)
+        try:
+            # Create a document for each room
+            full = FullInfo(
+                Type=record.get("Tipologia"),
+                Stars=parse_int(record.get("Stelle")),
+                CheckIn=parse_date(record.get("CheckIn")),
+                CheckOut=parse_date(record.get("CheckOut")),
+                Destination=record.get("Destinazione"),
+                DemandPressure=record.get("TIN"),
+                SearchRank=parse_int(record.get("SearchRank")),
+                SearchPage=parse_int(record.get("SearchPage")),
+                AccommodationType=record.get("AccomodationType"),
+                Treatment=record.get("Trattamento"),
+                CancellationPolicy=record.get("CancellationType"),
+                AccomodationLevel=extract_accommodation_level(record.get("AccomodationType")),
+                Occupation=parse_int(record.get("Occupazione")),
+                PriceTot=parse_float(record.get("TariffaTOT")),
+                PriceNight=parse_float(record.get("TariffaGG")),
+                minimunStay=parse_int(record.get("minimunStay")),
+                RoomsBARLeft=parse_int(record.get("RoomsLeft")) or None,
+                IsOffer=record.get("IsAnOffer") == "YES",
+                OfferDiscountValue=parse_float(record.get("OfferDiscount")),
+                OfferDiscountPercent=None,  # Adjust if needed
+                OfferTitle=record.get("OfferTitle"),
+                OfferDesc=record.get("OfferDescription"),
+                ESG_Rating=record.get("ESG_Rating"),
+                ESG_Score=str(record.get("ESG_Score")),
+                DateSearch=parse_date(record.get("DataRicerca")),
+                FullDateSearch=parse_date(record.get("FullDataRicerca"))
+                    if record.get("FullDataRicerca")
+                    else parse_date(record.get("DataRicerca")),
+                PropertyId=ObjectId(record_PropertyId)
+            )
+            doc = full.model_dump(exclude_none=True)
 
-                # Convert all `datetime.date` fields to `datetime.datetime`
-                if isinstance(doc.get("DateSearch"), date):
-                    doc["DateSearch"] = datetime.combine(doc["DateSearch"], datetime.min.time())
-                if isinstance(doc.get("FullDateSearch"), date):
-                    doc["FullDateSearch"] = datetime.combine(doc["FullDateSearch"], datetime.min.time())
+            # Convert all `datetime.date` fields to `datetime.datetime`
+            if isinstance(doc.get("DateSearch"), date):
+                doc["DateSearch"] = datetime.combine(doc["DateSearch"], datetime.min.time())
+            if isinstance(doc.get("FullDateSearch"), date):
+                doc["FullDateSearch"] = datetime.combine(doc["FullDateSearch"], datetime.min.time())
 
-                # Determine the property type (HTL or APT) using the in-memory dictionary
-                tipologia = record.get("Tipologia")
-                property_category = property_types_map.get(tipologia, "APT")  # Default to "APT" if not found
+            # Determine the property type (HTL or APT) using the in-memory dictionary
+            tipologia = record.get("Tipologia")
+            property_category = property_types_map.get(tipologia, "APT")  # Default to "APT" if not found
 
-                # Insert into the correct collection based on property type
-                collection_name = "FULL_HTL" if property_category == "HTL" else "FULL_APT"
-                collection = db[collection_name]
+            # Insert into the correct collection based on property type
+            collection_name = "FULL_HTL" if property_category == "HTL" else "FULL_APT"
+            collection = db[collection_name]
 
-                result = collection.insert_one(doc)
-                logfire.info("Inserted record", city=doc, mongo_id=str(result.inserted_id))
-                success += 1  # Increment success count
+            result = collection.insert_one(doc)
+            logfire.info("Inserted record", city=doc, mongo_id=str(result.inserted_id))
+            success += 1  # Increment success count
 
-            except Exception as e:
-                logfire.error("Error inserting room record", error=str(e), record=room)
-                with open("skipped_records.txt", "a", encoding="utf-8") as skipped_file:
-                    skipped_file.write(f"{record.get('Destinazione')},{record.get('Città')}\n")
-                errors += 1
+        except Exception as e:
+            logfire.error("Error inserting room record", error=str(e), record=record)
+            with open("skipped_records.txt", "a", encoding="utf-8") as skipped_file:
+                skipped_file.write(f"{record.get('Destinazione')},{record.get('Città')}\n")
+            errors += 1
 
     logfire.info("Import summary", success=success, errors=errors)
     print(f"Import finished. Success: {success}, Errors: {errors}")

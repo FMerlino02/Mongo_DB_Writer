@@ -4,65 +4,45 @@ rooms.py
 Script to import room data into MongoDB. Each room is mapped to a singular record in the Rooms collection.
 """
 
-from typing import Optional, Union, List
+from typing import Union, Optional
 from datetime import datetime
 from pydantic import BaseModel
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
 from dotenv import load_dotenv
 from bson import ObjectId
-from parsers import parse_int, parse_float, parse_date
 import logfire
-import os
+from parsers import parse_int, parse_float, parse_date
+from map_booking_ids import get_booking_id_map
 import json
+import os
 import re
 
 # Start logfire session
 logfire.configure()
-
-
-def parse_occupancy(accomodation_type: str, occupazione: int):
-    """
-    Extracts OccupancyAdult and OccupancyKid from AccomodationType string.
-    If 'Bambino' is not present, uses 'Occupazione' for adults and sets kids to 0.
-    """
-    if not accomodation_type or not isinstance(accomodation_type, str):
-        return None, None
-
-    # Regex to find "Adulti" and "Bambino" numbers
-    adult_match = re.search(r"(\d+)\s*Adulti", accomodation_type)
-    kid_match = re.search(r"(\d+)\s*Bambino", accomodation_type)
-
-    occupancy_adult = int(adult_match.group(1)) if adult_match else None
-    occupancy_kid = int(kid_match.group(1)) if kid_match else 0
-
-    # If no "Adulti" or "Bambino" found, fallback to Occupazione
-    if occupancy_adult is None:
-        occupancy_adult = occupazione
-        occupancy_kid = 0
-
-    return occupancy_adult, occupancy_kid
 
 class RoomInfo(BaseModel):
     """
     Pydantic model for room information.
     """
     roomName: str
-    roomDesc: List[str]
-    roomSize: Optional[int]
+    roomDesc: str
+    roomSize: int
     hasInventory: bool
-    OccupancyAdult: Optional[int]
-    OccupancyKid: Optional[int]
-    BedDesc: Optional[str]
+    OccupancyAdult: int
+    OccupancyKid: int
+    BedDesc: str
     MainType: str
     SubType: str
+    
+    DateSearch: datetime
     FullDateSearch: datetime
-    Quantity: Optional[int]
+
     PropertyId: Union[str, ObjectId]
 
     class Config:
-        allow_population_by_field_name = True
-
+        validate_by_name = True  # Updated for Pydantic v2
+        arbitrary_types_allowed = True  # Allow ObjectId type
 
 def seed_rooms():
     """
@@ -85,43 +65,53 @@ def seed_rooms():
     db = client[db_name]
 
     # Load the JSON file containing room data
-    file_path = r"C:\Users\Eiji\Desktop\Rooms.json"
+    file_path = r"C:\Users\Eiji\Desktop\A_Properties_Lago di Como_PTY_APT_2025-03-20.json"
     with open(file_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
     success, errors = 0, 0
 
+    booking_id_map = get_booking_id_map()  # Assuming this function is defined in map_booking_ids.py
+
     for record in data:
         try:
-            # Map PropertyId using booking_id
-            booking_id = record.get("PropertyId")
-            if not booking_id:
-                logfire.error(f"Missing PropertyId for room: {record}")
+            booking_id = parse_int(record.get("id"))  # Assuming "id" is the booking_id in the JSON
+            if booking_id in booking_id_map:
+                record_PropertyId = booking_id_map[booking_id]
+            else:
+                # Log the issue and write the skipped record to the file
+                logfire.error(f"Incorrect mapping for booking_id: {booking_id}")
+                with open("skipped_ids.txt", "a", encoding="utf-8") as skipped_file:
+                    skipped_file.write(f"{booking_id}\n")
                 errors += 1
                 continue
 
-            # Use parse_occupancy to extract adult/kid occupancy
-            occupancy_adult, occupancy_kid = parse_occupancy(
-                record.get("AccomodationType"),
-                parse_int(record.get("Occupazione"))
-            )
+            for room in record.get("Rooms", []):
+                # Parse maxOccupancy to extract adult and kid occupancy
+                max_occupancy = room.get("maxOccupancy", "")
+                occupancy_adult, occupancy_kid = 0, 0
+                if max_occupancy:
+                    parts = max_occupancy.split(",")
+                    if len(parts) > 0:
+                        occupancy_adult = parse_int(parts[0].split()[0])  # Extract number of adults
+                    if len(parts) > 1:
+                        occupancy_kid = parse_int(parts[1].split()[0])  # Extract number of kids
 
-            # Create a RoomInfo object
-            room = RoomInfo(
-                uniqueRoomId=record.get("uniqueRoomId"),
-                roomName=record.get("roomName"),
-                roomDesc=record.get("roomDesc", []),
-                roomSize=parse_int(record.get("roomSize")),
-                hasInventory=record.get("hasInventory", False),
-                OccupancyAdult=occupancy_adult,
-                OccupancyKid=occupancy_kid,
-                BedDesc=record.get("BedDesc"),
-                MainType=record.get("MainType"),
-                SubType=record.get("SubType"),
-                FullDateSearch=parse_date(record.get("FullDateSearch")),
-                Quantity=parse_int(record.get("Quantity")),
-                PropertyId=ObjectId(booking_id) if ObjectId.is_valid(booking_id) else booking_id
-            )
+                room = RoomInfo(
+                    roomName=room.get("name"),
+                    roomDesc=room.get("description"),
+                    roomSize=parse_int(room.get("roomSize")),
+                    hasInventory=room.get("hasRoomInventory", False),
+                    OccupancyAdult=occupancy_adult,
+                    OccupancyKid=occupancy_kid,
+                    BedDesc=room.get("BedsDetails"),
+                    MainType=room.get("mainType"),
+                    SubType=room.get("subType"),
+                    FullDateSearch=parse_date(record.get("DataRicerca")),  # Fixed
+                    DateSearch=parse_date(record.get("DataFullRicerca")),  # Fixed
+                    PropertyId=ObjectId(record_PropertyId)
+                )
+
             doc = room.model_dump(exclude_none=True)
 
             # Insert the room document into the Rooms collection
